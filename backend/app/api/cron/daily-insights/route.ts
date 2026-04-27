@@ -2,18 +2,25 @@ import { type NextRequest, NextResponse } from "next/server";
 import { requireCronAuth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { generateDailyInsight } from "@/lib/daily-insight";
+import { sendPushBatch, type PushMessage } from "@/lib/push";
 import { errorResponse } from "@/lib/errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+const PAGE_SIZE = 200;
+
 /**
  * Vercel Cron: runs nightly at 03:00 UTC. Generates today's insight for every
- * paid subscriber who has at least one full reading. Failures are logged but
- * never block other users.
+ * active subscriber and dispatches Expo Push notifications in chunks.
  *
- * For volume > ~5000 paying users, switch this to a paginated job that fans
- * out to a queue (Inngest, QStash) rather than a single function invocation.
+ * Scale notes:
+ * - Up to ~5,000 paying users this single function call is fine (each
+ *   insight is a Haiku 4.5 call ~1-2s, plus 100-msg push chunks).
+ * - Beyond ~5,000, switch to a queue (Inngest, QStash, or Supabase Edge
+ *   Cron + workers) to fan out across many parallel workers, and do
+ *   per-timezone scheduling so users get pushed at their local
+ *   `daily_insight_time` rather than all at once.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -22,31 +29,80 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
     const admin = getSupabaseAdmin();
 
-    const { data: profiles, error } = await admin
-      .from("profiles")
-      .select("id")
-      .in("subscription_status", ["active", "trialing", "lifetime"]);
-    if (error) throw error;
+    const results = { generated: 0, skipped: 0, failed: 0, pushed: 0, push_failed: 0 };
+    let from = 0;
 
-    const results = { generated: 0, skipped: 0, failed: 0 };
+    while (true) {
+      const { data: profiles, error } = await admin
+        .from("profiles")
+        .select("id, push_token")
+        .in("subscription_status", ["active", "trialing", "lifetime"])
+        .range(from, from + PAGE_SIZE - 1);
+      if (error) throw error;
+      if (!profiles || profiles.length === 0) break;
 
-    for (const p of profiles ?? []) {
-      try {
-        await generateDailyInsight({ userId: p.id, forDate: today });
-        results.generated += 1;
-      } catch (e: unknown) {
-        const code = (e as { code?: string })?.code;
-        if (code === "no_reading") {
-          results.skipped += 1;
-        } else {
-          results.failed += 1;
-          console.error("daily insight failed", p.id, e);
+      const pushBatch: PushMessage[] = [];
+
+      for (const p of profiles) {
+        try {
+          const insight = await generateDailyInsight({ userId: p.id, forDate: today });
+          results.generated += 1;
+          if (p.push_token) {
+            pushBatch.push({
+              to: p.push_token,
+              title: "Today's reading",
+              body: truncate(insight.content, 240),
+              data: { type: "daily_insight", id: insight.id },
+              sound: "default",
+            });
+          }
+        } catch (e: unknown) {
+          const code = (e as { code?: string })?.code;
+          if (code === "no_reading") {
+            results.skipped += 1;
+          } else {
+            results.failed += 1;
+            console.error("[cron] daily insight failed", p.id, e);
+          }
         }
       }
+
+      const pushResult = await sendPushBatch(pushBatch);
+      results.pushed += pushResult.sent;
+      results.push_failed += pushResult.failed;
+
+      // Mark delivered for any insight whose push succeeded (best-effort —
+      // we approximate by setting delivered_at on every generated insight
+      // for these users; for finer-grained per-message accuracy, attach the
+      // insight id to the ticket and reconcile after).
+      if (pushResult.sent > 0) {
+        const userIds = profiles.map((p) => p.id);
+        await admin
+          .from("daily_insights")
+          .update({ delivered_at: new Date().toISOString() })
+          .eq("for_date", today)
+          .in("user_id", userIds)
+          .is("delivered_at", null);
+      }
+
+      // Clear invalid tokens so we don't keep retrying dead devices.
+      if (pushResult.invalidTokens.length > 0) {
+        await admin
+          .from("profiles")
+          .update({ push_token: null })
+          .in("push_token", pushResult.invalidTokens);
+      }
+
+      if (profiles.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
 
     return NextResponse.json({ date: today, ...results });
   } catch (err) {
     return errorResponse(err);
   }
+}
+
+function truncate(s: string, max: number): string {
+  return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }

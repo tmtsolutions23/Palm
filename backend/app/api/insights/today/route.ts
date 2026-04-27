@@ -12,7 +12,7 @@ export const maxDuration = 30;
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `daily:get:${user.id}`, limit: 60, windowSec: 60 });
+    await rateLimit({ key: `daily:get:${user.id}`, limit: 60, windowSec: 60 });
 
     const profile = await getProfile(user.id);
     if (!isPaid(profile as never)) {

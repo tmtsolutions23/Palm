@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `readings:detail:${user.id}`, limit: 60, windowSec: 60 });
+    await rateLimit({ key: `readings:detail:${user.id}`, limit: 60, windowSec: 60 });
 
     const { id } = await ctx.params;
     const admin = getSupabaseAdmin();
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `readings:delete:${user.id}`, limit: 30, windowSec: 60 });
+    await rateLimit({ key: `readings:delete:${user.id}`, limit: 30, windowSec: 60 });
 
     const { id } = await ctx.params;
     const admin = getSupabaseAdmin();

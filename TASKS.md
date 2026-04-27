@@ -164,6 +164,33 @@ Each week ends with a deployable milestone. Day estimates are conservative for a
 
 ---
 
+## Week 5 — Operational Hardening (after first 100 paying users)
+
+When you cross ~$1K MRR, spend a week making the app boring to operate:
+
+- [ ] Provision Upstash Redis (free tier is enough at this stage); set `UPSTASH_REDIS_REST_URL` + `_TOKEN` in Vercel. Confirm rate limiter is using Redis (logs).
+- [ ] Set up UptimeRobot or BetterStack hitting `/api/health` every minute. Page on outage.
+- [ ] Sentry: configure release tracking + sourcemap upload in EAS post-build hook.
+- [ ] PostHog: build the 4 dashboards that matter — D1/D7/D30 retention, paywall conversion, reading completion rate, daily insight open rate.
+- [ ] RevenueCat: enable webhook retry alerts to email.
+- [ ] Anthropic: set monthly spend cap as hard ceiling (account settings).
+- [ ] Read [OPERATIONS.md](./OPERATIONS.md) end-to-end and run through one incident scenario as a drill.
+- [ ] Backup recovery drill: `supabase db dump` from prod → restore to a scratch project → confirm row counts.
+- [ ] Document support email response templates (restore failure, refund, content complaint).
+
+## Scale milestones (when to upgrade infrastructure)
+
+| Trigger | Action |
+|---|---|
+| 1,000 paying users | Upstash for rate limiter (already wired, just env vars). Vercel Pro plan. |
+| 5,000 paying users | Daily-insight cron → queue (Inngest/QStash). Per-timezone delivery. |
+| 10,000 paying users | Supabase Pro + connection pooler URL. Photo retention TTL job. CDN for share cards. |
+| 50,000 paying users | Multi-region replicas. Background workers. Cost telemetry dashboard. |
+
+See [OPERATIONS.md](./OPERATIONS.md) for the full runbook.
+
+---
+
 ## Post-launch backlog (not in V1)
 - Localization (Spanish, Portuguese first — high spiritual app demand)
 - Tarot or numerology side feature (only if data shows users asking)

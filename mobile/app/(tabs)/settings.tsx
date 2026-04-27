@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useAuth } from "@/lib/auth-context";
 import { useSubscription } from "@/hooks/useSubscription";
-import { fetchProfile, type Profile } from "@/lib/api";
+import { fetchProfile, deleteAccount, type Profile } from "@/lib/api";
 import { colors, radius, spacing, type } from "@/constants/theme";
 
 const APP_URL = process.env.EXPO_PUBLIC_APP_URL ?? "https://palmreader.app";
@@ -25,13 +25,21 @@ export default function Settings() {
   const confirmDelete = () =>
     Alert.alert(
       "Delete account?",
-      "This permanently removes your readings, photos, and account.",
+      "This permanently removes your readings, photos, and account. Cancel any active subscription separately in your App Store / Play Store account.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => Linking.openURL(`${APP_URL}/delete-account`),
+          onPress: async () => {
+            try {
+              await deleteAccount();
+              await signOut();
+            } catch (e) {
+              const err = e as { message?: string };
+              Alert.alert("Couldn't delete account", err.message ?? "Try again later.");
+            }
+          },
         },
       ],
     );

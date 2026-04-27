@@ -20,7 +20,7 @@ const PatchBody = z.object({
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `profile:get:${user.id}`, limit: 60, windowSec: 60 });
+    await rateLimit({ key: `profile:get:${user.id}`, limit: 60, windowSec: 60 });
 
     const admin = getSupabaseAdmin();
     const { data, error } = await admin
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `profile:patch:${user.id}`, limit: 30, windowSec: 60 });
+    await rateLimit({ key: `profile:patch:${user.id}`, limit: 30, windowSec: 60 });
 
     const patch = PatchBody.parse(await req.json());
     const admin = getSupabaseAdmin();

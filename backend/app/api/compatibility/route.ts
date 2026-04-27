@@ -24,7 +24,7 @@ const Body = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `compat:post:${user.id}`, limit: 5, windowSec: 86400 });
+    await rateLimit({ key: `compat:post:${user.id}`, limit: 5, windowSec: 86400 });
 
     const profile = await getProfile(user.id);
     if (!isPaid(profile as never)) {

@@ -83,6 +83,25 @@ Every table has RLS enabled. The pattern: user JWT → `auth.uid()` matches `use
 - Mobile screens use Expo Router; do not introduce React Navigation manually
 - Theme tokens live in `mobile/constants/theme.ts` — no hardcoded colors in components
 
+## Scaling guardrails
+
+These are the design choices that make the app survive growth without rewrites. Don't break them without thinking carefully.
+
+- **Rate limiter is pluggable.** `backend/lib/rate-limit.ts` uses Upstash Redis when `UPSTASH_REDIS_REST_URL` + `_TOKEN` are set, otherwise falls back to per-instance memory. The fallback exists for dev only — production must run with Upstash configured. Per-instance memory does not work across Vercel function instances.
+- **Cron is paginated, not single-shot.** The daily-insights cron iterates `profiles` in pages of 200 and pushes in chunks of 100. Beyond ~5K paying users, replace the in-line for-loop with a queue (Inngest / QStash / Supabase Edge cron + workers) for parallel fan-out. Architecture is intentionally stop-and-replace at that threshold rather than gradually scaled.
+- **Writes are CAS-guarded.** The free-quota increment in `POST /api/readings` uses optimistic concurrency (`.eq("free_readings_used", current_value)`) so concurrent reads can't both increment past the limit.
+- **Backend is stateless.** No in-memory caches that affect correctness. Anything stateful goes in Supabase or Upstash.
+- **Photos are private.** Always served via signed URLs with short TTL. The `palms` bucket has RLS enforcing folder-prefix-by-user-id.
+- **Cost is logged per row.** `readings.cost_usd` and `readings.input_tokens` / `output_tokens` exist for cost forecasting and abuse detection. Always populate these.
+- **Subscription state has a single source of truth (RevenueCat) and a derived cache (`profiles.subscription_status`).** Update the cache only via the webhook. Never let the mobile RC SDK be the only check for paid features — backend always re-checks.
+- **Push tokens that fail with `DeviceNotRegistered` are auto-cleared.** Don't accumulate dead tokens; the cron handles this.
+- **CI runs on every PR.** `.github/workflows/ci.yml` runs typecheck on backend + mobile and SQL lint on migrations. Do not merge red.
+- **Account deletion is wired (Apple guideline 5.1.1(v)).** `DELETE /api/account` cascades through auth.users → all owned tables → storage bytes. Verify ON DELETE CASCADE on every new FK.
+
+## Capacity checkpoints
+
+See [OPERATIONS.md](./OPERATIONS.md#capacity-planning-checkpoints) for the table of "what to upgrade when". Summary: in-memory limiter dies at ~1K paying users, single-shot cron dies at ~5K, single-region DB starts to feel hot at ~10K.
+
 ## Things to be careful about
 
 - **App Store guideline 4.8**: if you add Google Sign In, Apple Sign In must be visually equal/prior. Currently we ship Apple + email only.

@@ -169,6 +169,12 @@ export async function createCompatibility(args: {
   return res.json();
 }
 
+// ─── Account ─────────────────────────────────────────────────────────────────
+
+export async function deleteAccount(): Promise<void> {
+  await authedFetch("/api/account", { method: "DELETE" });
+}
+
 // ─── Daily insight ───────────────────────────────────────────────────────────
 
 export interface DailyInsight {

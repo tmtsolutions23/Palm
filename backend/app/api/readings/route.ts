@@ -20,7 +20,7 @@ const PostBody = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `readings:post:${user.id}`, limit: 100, windowSec: 86400 });
+    await rateLimit({ key: `readings:post:${user.id}`, limit: 100, windowSec: 86400 });
 
     const profile = await getProfile(user.id);
     const body = PostBody.parse(await req.json());
@@ -96,12 +96,16 @@ export async function POST(req: NextRequest) {
       .single();
     if (insertErr || !reading) throw new ApiError(500, "db_error", insertErr?.message ?? "Insert failed");
 
-    // Successful reading — now consume the free quota for free users.
+    // Successful reading — consume the free quota for free users via CAS so
+    // concurrent requests can't both increment past the limit. If the CAS
+    // loses the race, the user already has a successful reading; the lost
+    // increment is acceptable (they'll just hit the paywall on the next try).
     if (!isPaid(profile as never)) {
       await admin
         .from("profiles")
         .update({ free_readings_used: profile.free_readings_used + 1 })
-        .eq("id", user.id);
+        .eq("id", user.id)
+        .eq("free_readings_used", profile.free_readings_used);
     }
 
     return NextResponse.json({
@@ -118,7 +122,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `readings:get:${user.id}`, limit: 60, windowSec: 60 });
+    await rateLimit({ key: `readings:get:${user.id}`, limit: 60, windowSec: 60 });
 
     const url = new URL(req.url);
     const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);

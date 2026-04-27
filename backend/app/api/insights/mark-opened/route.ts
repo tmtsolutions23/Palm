@@ -12,7 +12,7 @@ const Body = z.object({ id: z.string().uuid() });
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    rateLimit({ key: `daily:mark:${user.id}`, limit: 60, windowSec: 60 });
+    await rateLimit({ key: `daily:mark:${user.id}`, limit: 60, windowSec: 60 });
 
     const { id } = Body.parse(await req.json());
     const admin = getSupabaseAdmin();
