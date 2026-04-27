@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { ApiError, errorResponse } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { isPaid } from "@/lib/subscription";
-import { generateDailyInsight } from "@/lib/daily-insight";
+import { generateDailyInsight, getApplicableInsight, shouldGenerateForDate } from "@/lib/daily-insight";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -22,19 +22,20 @@ export async function GET(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
     const admin = getSupabaseAdmin();
 
-    const { data: existing, error: readErr } = await admin
-      .from("daily_insights")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("for_date", today)
-      .maybeSingle();
-    if (readErr) throw new ApiError(500, "db_error", readErr.message);
-
+    // 2-day insight caching: on even days, fall back to yesterday's insight
+    const existing = await getApplicableInsight(admin, user.id, today);
     if (existing) {
       return NextResponse.json(existing);
     }
 
-    // Lazy generation if cron hasn't produced one yet (e.g. brand-new user).
+    // Lazy generation if cron hasn't produced one yet AND today is a generation day.
+    // On even days with no yesterday insight, generate anyway so the user isn't stuck.
+    if (shouldGenerateForDate(today)) {
+      const created = await generateDailyInsight({ userId: user.id, forDate: today });
+      return NextResponse.json(created);
+    }
+
+    // Even day, no yesterday insight — generate for today as a fallback
     const created = await generateDailyInsight({ userId: user.id, forDate: today });
     return NextResponse.json(created);
   } catch (err) {

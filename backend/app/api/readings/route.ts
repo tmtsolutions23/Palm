@@ -4,10 +4,11 @@ import { requireUser, getProfile } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { ApiError, errorResponse } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
-import { isPaid, FREE_READING_LIMIT } from "@/lib/subscription";
+import { isPaid } from "@/lib/subscription";
 import { fetchPalmAsBase64 } from "@/lib/storage";
 import { getAnthropic, VISION_MODEL, computeCostUsd, extractText } from "@/lib/claude";
 import { READING_SYSTEM_PROMPT, buildReadingUserMessage } from "@/lib/prompts/reading";
+import { pickDemoReading } from "@/lib/demo-reading";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -20,18 +21,55 @@ const PostBody = z.object({
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser(req);
-    await rateLimit({ key: `readings:post:${user.id}`, limit: 100, windowSec: 86400 });
+    await rateLimit({ key: `readings:post:${user.id}`, limit: 10, windowSec: 86400 });
 
     const profile = await getProfile(user.id);
     const body = PostBody.parse(await req.json());
 
-    // Free quota gate (check only — increment after successful Claude call so
-    // failed photo readings don't burn the user's free reading).
-    if (!isPaid(profile as never) && profile.free_readings_used >= FREE_READING_LIMIT) {
-      throw new ApiError(402, "paywall_required", "Upgrade to continue reading.");
+    // Free-tier users receive a curated demo reading with zero AI cost.
+    if (!isPaid(profile as never)) {
+      const demo = pickDemoReading(user.id);
+
+      const admin = getSupabaseAdmin();
+      const { data: photo, error: photoErr } = await admin
+        .from("palm_photos")
+        .select("id, user_id")
+        .eq("id", body.photo_id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (photoErr || !photo) {
+        throw new ApiError(404, "photo_not_found", "Photo not found");
+      }
+
+      const { data: reading, error: insertErr } = await admin
+        .from("readings")
+        .insert({
+          user_id: user.id,
+          photo_id: photo.id,
+          reading_type: "full",
+          lines_jsonb: demo.lines,
+          summary: demo.summary,
+          model_version: "demo",
+          input_tokens: 0,
+          output_tokens: 0,
+          cost_usd: 0,
+        })
+        .select()
+        .single();
+      if (insertErr || !reading) {
+        throw new ApiError(500, "db_error", insertErr?.message ?? "Insert failed");
+      }
+
+      return NextResponse.json({
+        reading_id: reading.id,
+        summary: demo.summary,
+        lines: demo.lines,
+        created_at: reading.created_at,
+        is_demo: true,
+      });
     }
 
-    // Load photo
+    // Paid-tier users get a real AI reading.
     const admin = getSupabaseAdmin();
     const { data: photo, error: photoErr } = await admin
       .from("palm_photos")
@@ -43,7 +81,6 @@ export async function POST(req: NextRequest) {
 
     const { base64, mediaType } = await fetchPalmAsBase64(photo.storage_path);
 
-    // Call Claude
     const anthropic = getAnthropic();
     const message = await anthropic.messages.create({
       model: VISION_MODEL,
@@ -71,7 +108,6 @@ export async function POST(req: NextRequest) {
       throw new ApiError(502, "ai_parse_error", "AI returned an unparseable response");
     }
     if ("error" in parsed && parsed.error === "no_palm_visible") {
-      // Don't consume free quota for unusable photos
       throw new ApiError(400, "photo_quality_low", parsed.message ?? "Palm not visible");
     }
 
@@ -95,18 +131,6 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
     if (insertErr || !reading) throw new ApiError(500, "db_error", insertErr?.message ?? "Insert failed");
-
-    // Successful reading — consume the free quota for free users via CAS so
-    // concurrent requests can't both increment past the limit. If the CAS
-    // loses the race, the user already has a successful reading; the lost
-    // increment is acceptable (they'll just hit the paywall on the next try).
-    if (!isPaid(profile as never)) {
-      await admin
-        .from("profiles")
-        .update({ free_readings_used: profile.free_readings_used + 1 })
-        .eq("id", user.id)
-        .eq("free_readings_used", profile.free_readings_used);
-    }
 
     return NextResponse.json({
       reading_id: reading.id,

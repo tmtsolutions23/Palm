@@ -1,5 +1,3 @@
-export const FREE_READING_LIMIT = 1;
-
 export type SubscriptionStatus =
   | "free"
   | "trialing"
@@ -11,6 +9,9 @@ export type SubscriptionStatus =
 /**
  * Returns true if the profile has a paid entitlement for premium features.
  * Cancelled users keep access until subscription_expires_at.
+ *
+ * Free-tier users receive a static demo reading instead of a real AI call,
+ * so there is no longer a free-readings counter or limit.
  */
 export function isPaid(profile: {
   subscription_status: SubscriptionStatus;

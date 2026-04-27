@@ -58,6 +58,13 @@ export default function Capture() {
       const reading = await createReading({ photo_id: uploaded.id, hand });
 
       track(Event.ReadingCompleted);
+
+      // If the reading was a demo (free tier), show the paywall next
+      if (reading.is_demo) {
+        router.replace(`/reading/${reading.reading_id}?demo=1` as never);
+        return;
+      }
+
       router.replace(`/reading/${reading.reading_id}` as never);
     } catch (e) {
       const err = e as ApiError;

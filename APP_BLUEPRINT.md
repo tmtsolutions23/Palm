@@ -1,7 +1,7 @@
 # Palm Reader — APP_BLUEPRINT.md
 
 ## Concept
-A premium mobile app (iOS + Android) that uses AI vision to analyze a photo of the user's palm and deliver personalized palmistry readings, daily insights, and relationship compatibility. Subscription-first monetization with a frictionless free first reading as the hook.
+A premium mobile app (iOS + Android) that uses AI vision to analyze a photo of the user's palm and deliver personalized palmistry readings, daily insights, and relationship compatibility. Subscription-only monetization — free users see a curated demo reading (zero AI cost), then hit the paywall to unlock real AI-powered readings.
 
 **Working name:** Palm Reader (placeholder — final brand TBD; suggested: "Palm.ai", "Lineage", "Palmist", "Mira Palm")
 
@@ -63,10 +63,10 @@ A premium mobile app (iOS + Android) that uses AI vision to analyze a photo of t
 ## 3. MONETIZATION MODEL
 
 ### Pricing tiers
-| Tier | Price | What you get |
-|---|---|---|
-| Free | $0 | 1 lifetime starter reading + locked daily insights |
-| Weekly | **$7.99/wk** (3-day free trial) | Unlimited readings, daily insights, compatibility, history |
+|| Tier | Price | What you get |
+|---|---|---|---|
+| Free | $0 | 1 curated demo reading (no AI cost) + locked daily insights. Paywall after demo. |
+| Weekly | **$7.99/wk** (3-day free trial) | Unlimited real AI readings, daily insights, compatibility, history |
 | Annual | **$39.99/yr** (3-day free trial, save 90%) | Same as weekly |
 | Lifetime | **$79.99 one-time** | Same as weekly, no recurring |
 
@@ -90,10 +90,11 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 - Critical: Apple/Google take 15–30% — gross-to-net is real, model accordingly
 
 ### Free trial assumptions
-- 3-day free trial on weekly + annual
+- 3-day free trial on weekly + annual (trial = real AI readings, not demo)
 - Industry baseline trial-to-paid conversion: 30–45% for spiritual apps with paywall after first reading
 - Day-1 to month-1 retention target: ~40%
 - Annual renewal target: 55%
+- Free-tier demo reading costs $0 in AI spend — eliminates viral cost-abuse vector
 
 ---
 
@@ -106,8 +107,8 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 
 ### F2. Daily Insight
 - **User story:** As a paying user, every morning I get a personalized palm-derived insight as a push notification + in-app card, so that I open the app daily.
-- **Acceptance criteria:** Generated nightly per user from their saved palm reading. Push fires at user's selected time (default 8am local). Card has "Save to journal" + "Share" actions.
-- **Complexity:** Medium (background job, push delivery, personalization)
+- **Acceptance criteria:** Generated nightly per user from their saved palm reading (2-day cache: generated on odd calendar days, reused on even days). Push fires at user's selected time (default 8am local). Card has "Save to journal" + "Share" actions.
+- **Complexity:** Medium (background job, push delivery, personalization, 2-day caching for cost efficiency)
 
 ### F3. Compatibility Reading
 - **User story:** As a user, I scan a friend or partner's palm alongside mine and get a relationship-focused reading, so that I share it with them.
@@ -130,7 +131,7 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 - ❌ User-generated palm interpretation library
 
 ### The one feature that converts free → paid
-**The 2nd reading.** The first reading is free and high-quality enough to feel real. The paywall fires the moment they tap "New Reading" again. Backed by the daily insight as the engagement hook that prevents churn after purchase.
+**The demo reading.** Free users see a curated example reading (3 variants, deterministic per user ID) that demonstrates the app's output quality and format. The result screen then shows "This was a sample reading ✨ — Subscribe to get a real AI reading personalized from your palm photo." The paywall fires immediately after the demo. No AI cost per free user. 3-day trial subscribers get real AI readings immediately.
 
 ---
 
@@ -142,7 +143,7 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 | Backend | **Next.js 16 API routes on Vercel** | Tight integration with Vercel Functions, Edge runtime for low-latency reads, AI SDK first-class. Chosen over standalone Node/Express (more infra) and Supabase Edge Functions (less mature). |
 | Database | **Supabase Postgres** | Postgres + auth + storage + RLS in one managed service. Chosen over Firebase (no SQL, vendor lock-in) and bare RDS (more ops). |
 | File storage | **Supabase Storage** | Palm photos stored with RLS; same provider as DB. |
-| AI provider | **Anthropic Claude Sonnet 4.6** (vision + text) | Strong vision capability, lower cost than Opus, prompt caching for personalization templates. Fall back to Claude Haiku 4.5 for daily insights to control cost. |
+| AI provider | **Anthropic Claude Sonnet 4.6** (vision + text) | Strong vision capability, lower cost than Opus, prompt caching for personalization templates. Haiku 4.5 for daily insights (2-day cache = 50% cost savings). Free tier uses static demo — zero AI cost per free user. |
 | AI orchestration | **Vercel AI SDK** | Streaming, structured output, provider-agnostic if we ever swap. |
 | IAP | **RevenueCat** | Industry standard, handles both stores, webhooks, analytics. Free tier covers MVP. |
 | Auth | **Supabase Auth** with Apple Sign In + Email magic link | Apple Sign In required by App Store policy (since we use other social logins). Email magic link as fallback. |
@@ -152,14 +153,27 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 | Transactional email | **Resend** | Cleanest DX, generous free tier |
 
 ### Monthly cost breakdown
+
+Paid-tier AI costs only (free tier = $0 via static demo reading):
+
+| Call Type | Model | Cost/call | Calls/user/mo | Notes |
+|-----------|-------|-----------|---------------|-------|
+| Palm reading | Sonnet 4.6 | ~$0.011 | 2.5 | Prompt caching on system prompt |
+| Compatibility | Sonnet 4.6 | ~$0.019 | 0.5 | 2 images per call |
+| Daily insight | Haiku 4.5 | ~$0.001 | 15 | 2-day cache (odd days only) |
+
 | Users | Vercel | Supabase | Claude API | RevenueCat | PostHog | Sentry | **Total** |
 |---|---|---|---|---|---|---|---|
-| 0 | $0 | $0 | $0 | $0 | $0 | $0 | **$0** |
-| 100 | $0 | $0 | ~$30 | $0 | $0 | $0 | **~$30** |
-| 1,000 | $20 | $25 | ~$300 | $0 | $0 | $26 | **~$370** |
-| 10,000 | $200 | $100 | ~$2,800 | ~$200 | $50 | $80 | **~$3,400** |
+| 0 | $0 | $0 | $0 | $0 | $0 | $0 | **~$13/mo** (domains + developer fees) |
+| 100 paid | $0 | $0 | ~$5 | $0 | $0 | $0 | **~$18/mo** |
+| 1,000 paid | $20 | $25 | ~$80 | $0 | $0 | $26 | **~$151/mo** |
+| 10,000 paid | $60 | $75 | ~$800 | ~$400 | $50 | $26 | **~$1,411/mo** |
 
-(Cost dominated by Claude API per-reading. Aggressive prompt caching can cut this 40%.)
+Key cost optimizations already implemented:
+- **Free tier = static demo reading** ($0 AI cost, eliminates viral cost-abuse vector)
+- **Daily insights cached 2 days** (cron only runs on odd calendar days, even days reuse yesterday's insight)
+- **Prompt caching** (90% discount on system prompt tokens for repeated calls)
+- **Reading rate limit 10/day** (was 100, prevents cost abuse from power users)
 
 ### Auth method
 **Supabase Auth** with two providers:
@@ -205,7 +219,7 @@ create table readings (
   lines_jsonb jsonb, -- {life: "...", heart: "...", head: "...", fate: "..."}
   summary text,
   share_card_url text,
-  model_version text, -- 'claude-sonnet-4-6'
+  model_version text, -- 'claude-sonnet-4-6' or 'demo' (static reading for free users)
   created_at timestamptz default now()
 );
 create index readings_user_created_idx on readings(user_id, created_at desc);
@@ -267,7 +281,7 @@ All endpoints under `https://api.palmreader.app`. JSON body unless noted. Auth =
 
 | Method | Path | Auth | Rate limit | Description |
 |---|---|---|---|---|
-| POST | `/api/readings` | required | 10/day free, 100/day pro | Multipart upload palm photo, returns reading |
+|| POST | `/api/readings` | required | 10/day (paid) | Create reading: paid users → real AI, free users → static demo + paywall CTA |
 | GET | `/api/readings` | required | 60/min | List user's readings (paginated) |
 | GET | `/api/readings/:id` | required | 60/min | Single reading detail |
 | DELETE | `/api/readings/:id` | required | 30/min | Delete reading |
@@ -281,10 +295,10 @@ All endpoints under `https://api.palmreader.app`. JSON body unless noted. Auth =
 
 ### Request/response example — POST /api/readings
 ```jsonc
-// Request: multipart/form-data
-// fields: photo (file, jpg/png, ≤8MB), hand ("left"|"right")
+// Request: JSON body
+// { photo_id: "uuid", hand: "left" | "right" }
 
-// Response 200
+// Response 200 — paid user (real AI reading)
 {
   "reading_id": "uuid",
   "summary": "Your palm reveals…",
@@ -298,10 +312,19 @@ All endpoints under `https://api.palmreader.app`. JSON body unless noted. Auth =
   "created_at": "2026-04-26T20:55:00Z"
 }
 
-// Response 400 — bad photo
+// Response 200 — free user (demo reading)
+{
+  "reading_id": "uuid",
+  "summary": "Your palm tells the story of someone who balances…",
+  "lines": { "life": "…", "heart": "…", "head": "…", "fate": "…" },
+  "created_at": "2026-04-26T20:55:00Z",
+  "is_demo": true   // mobile shows paywall CTA when true
+}
+
+// Response 400 — bad photo (paid users only, demo doesn't call AI)
 { "error": "photo_quality_low", "message": "We couldn't see your palm clearly. Try better lighting." }
 
-// Response 402 — paywalled (2nd+ free reading)
+// Response 402 — paywall (legacy, not used since free tier is now demo)
 { "error": "paywall_required", "message": "Upgrade to continue." }
 ```
 
@@ -315,14 +338,13 @@ Validates `X-RevenueCat-Signature` HMAC. Upserts `profiles.subscription_status`,
 ### Complete journey
 ```
 Cold install
-  → Onboarding (3 cards: "Your palm tells your story" → "Powered by AI" → "Your first reading is free")
+  → Onboarding (3 cards: "Your palm tells your story" → "Powered by AI" → "See what your palm reveals")
   → Permissions prompt (camera, then notifications)
   → Auth (Apple / Email magic link) — single screen, Apple is default
   → Home: "Take your first reading" CTA
-  → Reading capture flow (instructions → camera with overlay → review → analyzing… → result)
-  → Share / save
-  → Tap "New Reading" → Paywall
-  → If subscribe → unlocked Pro experience
+  → Reading capture flow (instructions → camera with overlay → review → analyzing… → demo result)
+  → Demo result screen: "This was a sample reading ✨" → Paywall CTA → "Unlock full experience"
+  → If subscribe → real AI readings, daily insights, compatibility, history
   → Daily push at 8am → opens to today's insight
 ```
 
@@ -445,14 +467,16 @@ Cold install
 
 ## 12. BIGGEST RISKS & MITIGATIONS
 
-| Risk | Mitigation |
-|---|---|
+|| Risk | Mitigation |
+|---|---|---|
 | App Store rejection (palm reading classed as "fortune-telling" in some markets) | Frame copy as "entertainment" in metadata; review Apple guideline 1.4.1; have Terms make non-medical/non-advice clear |
 | Photo quality kills the magic | Strict pre-upload quality gate + retake prompt; collect failures to refine prompt |
-| AI cost runs away | Aggressive Claude prompt caching, switch daily insights to Haiku, cap free user reads |
+| ~~AI cost runs away~~ | ~~Aggressive Claude prompt caching, switch daily insights to Haiku, cap free user reads~~ **RESOLVED**: Free tier now uses static demo ($0 AI cost). Paid readings capped at 10/day. Daily insights cached 2 days. |
+| Viral free-tier cost spike | **RESOLVED**: Free users receive a curated demo reading — zero AI cost per free user. A TikTok spike of 50K downloads costs $0 in Anthropic spend. |
 | Generic-feeling readings | Invest week 2 entirely in prompt engineering with 100+ test palms |
 | Apple Sign In edge cases | Test fully on day 1 — biggest source of TestFlight failures |
 | Privacy concern about palm photos | Store with RLS, allow user-initiated delete, optional "delete photo after reading" toggle |
+| Demo reading feels fake / doesn't convert | Demo readings are carefully written with specific palm-line language (not generic horoscope text). 3 variants rotate by user ID hash. A/B test different demos post-launch. |
 
 ---
 

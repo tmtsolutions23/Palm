@@ -39,7 +39,6 @@ export interface Profile {
   timezone: string;
   subscription_status: string;
   subscription_expires_at: string | null;
-  free_readings_used: number;
 }
 
 export async function fetchProfile(): Promise<Profile> {
@@ -103,6 +102,7 @@ export interface Reading {
   summary: string;
   lines: { life: string; heart: string; head: string; fate: string };
   created_at: string;
+  is_demo?: boolean;
 }
 
 export async function createReading(args: {
@@ -167,12 +167,6 @@ export async function createCompatibility(args: {
     body: JSON.stringify(args),
   });
   return res.json();
-}
-
-// ─── Account ─────────────────────────────────────────────────────────────────
-
-export async function deleteAccount(): Promise<void> {
-  await authedFetch("/api/account", { method: "DELETE" });
 }
 
 // ─── Daily insight ───────────────────────────────────────────────────────────

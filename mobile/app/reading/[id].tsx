@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, Share } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, Share } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button } from "@/components/Button";
 import { ReadingCard } from "@/components/ReadingCard";
@@ -9,7 +9,8 @@ import { colors, spacing, type } from "@/constants/theme";
 
 export default function Result() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, demo } = useLocalSearchParams<{ id: string; demo?: string }>();
+  const isDemo = demo === "1";
   const [reading, setReading] = useState<{
     summary: string;
     lines_jsonb: { life: string; heart: string; head: string; fate: string };
@@ -64,10 +65,27 @@ export default function Result() {
         <ReadingCard symbol="✦" title="Fate line" body={reading.lines_jsonb.fate} />
       </View>
 
-      <View style={styles.actions}>
-        <Button title="Share reading" onPress={onShare} />
-        <Button title="Done" variant="ghost" onPress={() => router.replace("/(tabs)")} />
-      </View>
+      {/* Demo reading: show paywall CTA instead of just "Done" */}
+      {isDemo ? (
+        <View style={styles.demoBanner}>
+          <Text style={[type.body, styles.demoTitle]}>
+            This was a sample reading ✨
+          </Text>
+          <Text style={[type.bodyMuted, styles.demoSubtext]}>
+            Subscribe to get a real AI reading personalized from your palm photo —
+            plus unlimited readings, daily insights, and compatibility.
+          </Text>
+          <Button title="Unlock full experience" onPress={() => router.push("/paywall")} />
+          <Pressable onPress={() => router.replace("/(tabs)")}>
+            <Text style={[type.caption, styles.maybeLater]}>Maybe later</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.actions}>
+          <Button title="Share reading" onPress={onShare} />
+          <Button title="Done" variant="ghost" onPress={() => router.replace("/(tabs)")} />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -85,4 +103,15 @@ const styles = StyleSheet.create({
   summary: { marginBottom: spacing.md },
   cards: { gap: spacing.md },
   actions: { gap: spacing.sm, marginTop: spacing.lg },
+  demoBanner: {
+    gap: spacing.md,
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    backgroundColor: colors.bgElevated,
+    borderRadius: 16,
+    alignItems: "center",
+  },
+  demoTitle: { fontWeight: "600", textAlign: "center" },
+  demoSubtext: { textAlign: "center", lineHeight: 20 },
+  maybeLater: { color: colors.textMuted, textAlign: "center", marginTop: spacing.xs },
 });

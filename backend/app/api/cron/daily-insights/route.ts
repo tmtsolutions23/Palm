@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { requireCronAuth } from "@/lib/auth";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
-import { generateDailyInsight } from "@/lib/daily-insight";
+import { generateDailyInsight, shouldGenerateForDate } from "@/lib/daily-insight";
 import { sendPushBatch, type PushMessage } from "@/lib/push";
 import { errorResponse } from "@/lib/errors";
 
@@ -14,9 +14,12 @@ const PAGE_SIZE = 200;
  * Vercel Cron: runs nightly at 03:00 UTC. Generates today's insight for every
  * active subscriber and dispatches Expo Push notifications in chunks.
  *
+ * Insights are valid for 2 days — we only generate on odd calendar days.
+ * On even days the cron returns early (no LLM spend).
+ * On the read path, even-day requests fall back to yesterday's insight.
+ *
  * Scale notes:
- * - Up to ~5,000 paying users this single function call is fine (each
- *   insight is a Haiku 4.5 call ~1-2s, plus 100-msg push chunks).
+ * - Up to ~5,000 paying users this single function call is fine.
  * - Beyond ~5,000, switch to a queue (Inngest, QStash, or Supabase Edge
  *   Cron + workers) to fan out across many parallel workers, and do
  *   per-timezone scheduling so users get pushed at their local
@@ -27,6 +30,19 @@ export async function GET(req: NextRequest) {
     requireCronAuth(req);
 
     const today = new Date().toISOString().slice(0, 10);
+
+    if (!shouldGenerateForDate(today)) {
+      return NextResponse.json({
+        date: today,
+        generated: 0,
+        skipped: 0,
+        failed: 0,
+        pushed: 0,
+        push_failed: 0,
+        reason: "even_day_cache_reuse",
+      });
+    }
+
     const admin = getSupabaseAdmin();
 
     const results = { generated: 0, skipped: 0, failed: 0, pushed: 0, push_failed: 0 };
@@ -71,10 +87,6 @@ export async function GET(req: NextRequest) {
       results.pushed += pushResult.sent;
       results.push_failed += pushResult.failed;
 
-      // Mark delivered for any insight whose push succeeded (best-effort —
-      // we approximate by setting delivered_at on every generated insight
-      // for these users; for finer-grained per-message accuracy, attach the
-      // insight id to the ticket and reconcile after).
       if (pushResult.sent > 0) {
         const userIds = profiles.map((p) => p.id);
         await admin
@@ -85,7 +97,6 @@ export async function GET(req: NextRequest) {
           .is("delivered_at", null);
       }
 
-      // Clear invalid tokens so we don't keep retrying dead devices.
       if (pushResult.invalidTokens.length > 0) {
         await admin
           .from("profiles")

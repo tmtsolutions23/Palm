@@ -5,6 +5,66 @@ import { DAILY_SYSTEM_PROMPT, buildDailyUserMessage } from "./prompts/daily";
 import { getProfile } from "./auth";
 
 /**
+ * Each insight is valid for 2 consecutive days to halve LLM spend.
+ * On odd calendar days (1, 3, 5...) we generate a fresh insight; on even
+ * days we reuse yesterday's. This is controlled by `shouldGenerateForDate()`.
+ */
+
+/** Returns true if a new insight should be generated for this date. */
+export function shouldGenerateForDate(forDate: string): boolean {
+  const day = new Date(forDate).getDate();
+  return day % 2 === 1; // odd-numbered days get a fresh insight
+}
+
+/** Returns yesterday's date string (YYYY-MM-DD). */
+function yesterday(dateStr: string): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Fetch the insight that should be shown for a given date. On even days
+ * this returns yesterday's insight (which is still valid for 2 days).
+ * Returns null if no applicable insight exists.
+ */
+export async function getApplicableInsight(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  forDate: string,
+): Promise<{
+  id: string;
+  user_id: string;
+  for_date: string;
+  content: string;
+  delivered_at: string | null;
+  opened_at: string | null;
+  created_at: string;
+} | null> {
+  // Try today first
+  const { data: todayInsight } = await admin
+    .from("daily_insights")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("for_date", forDate)
+    .maybeSingle();
+  if (todayInsight) return todayInsight as never;
+
+  // On even days, fall back to yesterday's insight (2-day validity)
+  if (!shouldGenerateForDate(forDate)) {
+    const { data: yesterdayInsight } = await admin
+      .from("daily_insights")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("for_date", yesterday(forDate))
+      .maybeSingle();
+    if (yesterdayInsight) return yesterdayInsight as never;
+  }
+
+  return null;
+}
+
+/**
  * Generate one daily insight for one user on one date. Idempotent on
  * (user_id, for_date) — second call returns the existing row.
  */
