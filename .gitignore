@@ -1,0 +1,59 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# build output
+.next/
+out/
+dist/
+build/
+.expo/
+.expo-shared/
+*.tsbuildinfo
+
+# native builds
+ios/
+android/
+*.ipa
+*.apk
+*.aab
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Sentry
+.sentryclirc
+
+# Supabase
+supabase/.branches
+supabase/.temp
+
+# secrets
+*.pem
+*.p8
+*.key
+GoogleService-Info.plist
+google-services.json
+
+# generated
+backend/lib/database.types.ts

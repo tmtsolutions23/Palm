@@ -1,0 +1,56 @@
+{
+  "expo": {
+    "name": "Palm Reader",
+    "slug": "palm-reader",
+    "scheme": "palmreader",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#1a1033"
+    },
+    "ios": {
+      "bundleIdentifier": "app.palmreader.client",
+      "supportsTablet": false,
+      "usesAppleSignIn": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "We use the camera to capture your palm for your personalized reading.",
+        "NSPhotoLibraryUsageDescription": "Allow Palm Reader to save your reading cards to your photo library.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.palmreader.client",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1033"
+      },
+      "permissions": ["CAMERA", "POST_NOTIFICATIONS"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Palm Reader to access your camera to read your palm."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#fef9ef"
+        }
+      ]
+    ],
+    "experiments": { "typedRoutes": false },
+    "extra": {
+      "router": { "origin": false },
+      "eas": { "projectId": "REPLACE_WITH_EAS_PROJECT_ID" }
+    }
+  }
+}
