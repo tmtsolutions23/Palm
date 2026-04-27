@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import { AuthProvider } from "@/lib/auth-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { track, Event } from "@/lib/analytics";
 import { colors } from "@/constants/theme";
 
@@ -17,9 +18,10 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <AuthProvider>
-        <StatusBar style="light" />
-        <Stack
+      <ErrorBoundary>
+        <AuthProvider>
+          <StatusBar style="light" />
+          <Stack
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: colors.bg },
@@ -35,7 +37,8 @@ export default function RootLayout() {
           <Stack.Screen name="paywall" options={{ presentation: "modal" }} />
           <Stack.Screen name="daily" />
         </Stack>
-      </AuthProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

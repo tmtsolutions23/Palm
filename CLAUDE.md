@@ -12,6 +12,7 @@ This is a multi-package monorepo (no workspace tooling — packages are independ
 
 - `mobile/` — Expo React Native app (SDK 51+, TypeScript, Expo Router file-based routing)
 - `backend/` — Next.js 16 API (App Router, deployed to Vercel) with Anthropic Claude vision integration
+- `shared/` — Zod schemas for type-safe API contracts between mobile and backend (`@palm/shared`)
 - `supabase/migrations/` — SQL migrations (timestamped). Apply with the Supabase CLI; never edit applied migrations.
 - `APP_BLUEPRINT.md` — product/business/architecture spec; the source of truth when scope decisions arise
 - `TASKS.md` — week-by-week build plan with deployable milestones
@@ -26,7 +27,7 @@ This is a multi-package monorepo (no workspace tooling — packages are independ
 - `eas build --profile production --platform all` — store-ready build
 - `eas submit -p ios` / `eas submit -p android` — submit to stores
 - `npx tsc --noEmit` — type-check
-- No test runner wired in MVP; add Jest + React Native Testing Library before scaling
+- `npm test` — Jest smoke tests
 
 ### Backend (`cd backend`)
 - `npm install`
@@ -34,6 +35,7 @@ This is a multi-package monorepo (no workspace tooling — packages are independ
 - `npm run build && npm start` — production-mode locally
 - `npm run lint` — ESLint
 - `npx tsc --noEmit` — type-check
+- `npm test` — Vitest smoke tests
 - `vercel --prod` — deploy production (preview is automatic via Vercel GitHub integration)
 
 ### Supabase (root)
