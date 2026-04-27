@@ -61,11 +61,11 @@ Each week ends with a deployable milestone. Day estimates are conservative for a
 - [ ] Mobile retry flow with examples of good/bad photos
 
 ### Day 11 — RevenueCat
-- [ ] Create products in App Store Connect: weekly $7.99, annual $39.99, lifetime $79.99
+- [ ] Create products in App Store Connect: weekly $7.99 (no trial), annual $39.99 (3-day trial), lifetime $99.99
 - [ ] Mirror in Google Play Console
 - [ ] RevenueCat offerings configured
 - [ ] Mobile paywall screen built (`mobile/app/paywall.tsx`) — annual selected by default, restore button visible
-- [ ] Free user gating: server-side 402 on 2nd reading
+- [ ] Free user flow: server returns demo reading, then paywall CTA on result screen (not 402 on 2nd reading)
 - [ ] Webhook `/api/webhooks/revenuecat` updating `profiles.subscription_status`
 
 ### Day 12 — History

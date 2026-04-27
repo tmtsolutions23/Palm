@@ -66,9 +66,9 @@ A premium mobile app (iOS + Android) that uses AI vision to analyze a photo of t
 || Tier | Price | What you get |
 |---|---|---|---|
 | Free | $0 | 1 curated demo reading (no AI cost) + locked daily insights. Paywall after demo. |
-| Weekly | **$7.99/wk** (3-day free trial) | Unlimited real AI readings, daily insights, compatibility, history |
-| Annual | **$39.99/yr** (3-day free trial, save 90%) | Same as weekly |
-| Lifetime | **$79.99 one-time** | Same as weekly, no recurring |
+| Weekly | **$7.99/wk** | Unlimited real AI readings, daily insights, compatibility, history |
+| Annual | **$39.99/yr** (3-day free trial, default selection) | Same as weekly |
+| Lifetime | **$99.99 one-time** | Same as weekly, no recurring |
 
 Default selected tier in paywall: **Annual** (highest LTV / lowest churn).
 
@@ -90,7 +90,8 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 - Critical: Apple/Google take 15–30% — gross-to-net is real, model accordingly
 
 ### Free trial assumptions
-- 3-day free trial on weekly + annual (trial = real AI readings, not demo)
+- 3-day free trial on annual only
+- Weekly has no trial (prevents stacking too much generosity after the free demo)
 - Industry baseline trial-to-paid conversion: 30–45% for spiritual apps with paywall after first reading
 - Day-1 to month-1 retention target: ~40%
 - Annual renewal target: 55%
@@ -131,7 +132,7 @@ Assuming blended ARPU of **~$50/yr** (mix of weekly churn-outs, annual, lifetime
 - ❌ User-generated palm interpretation library
 
 ### The one feature that converts free → paid
-**The demo reading.** Free users see a curated example reading (3 variants, deterministic per user ID) that demonstrates the app's output quality and format. The result screen then shows "This was a sample reading ✨ — Subscribe to get a real AI reading personalized from your palm photo." The paywall fires immediately after the demo. No AI cost per free user. 3-day trial subscribers get real AI readings immediately.
+**The demo reading.** Free users see a curated example reading (3 variants, deterministic per user ID) that demonstrates the app's output quality and format. The result screen then shows "This was a sample reading ✨ — Subscribe to get a real AI reading personalized from your palm photo." The paywall fires immediately after the demo. No AI cost per free user. The annual plan includes a 3-day trial; weekly has no trial.
 
 ---
 

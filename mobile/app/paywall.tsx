@@ -69,6 +69,10 @@ export default function Paywall() {
       </Pressable>
 
       <Text style={[type.display, styles.title]}>Unlock the rest of your palm</Text>
+      <Text style={[type.bodyMuted, styles.subtitle]}>
+        Get your real AI reading personalized from your palm photo. Annual includes a 3-day free
+        trial and is the best value.
+      </Text>
 
       <View style={styles.bullets}>
         <Bullet text="Unlimited readings" />
@@ -95,8 +99,7 @@ export default function Paywall() {
       </Pressable>
 
       <Text style={[type.caption, styles.legal]}>
-        Subscriptions auto-renew until cancelled. Cancel any time in your account settings. Annual plan
-        billed annually after a 3-day free trial.
+        Weekly renews at {findPrice(packages, "week") ?? "$7.99/week"} until cancelled. Annual renews at {findPrice(packages, "annual") ?? "$39.99/year"} after a 3-day free trial. Lifetime is a one-time purchase.
       </Text>
     </ScrollView>
   );
@@ -120,13 +123,26 @@ function PackageCard({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const id = `${pkg.identifier} ${pkg.product.identifier} ${pkg.product.title}`.toLowerCase();
+  const isAnnual = id.includes("annual") || id.includes("year");
+  const isWeekly = id.includes("week");
+  const isLifetime = id.includes("lifetime");
+
+  let badge: string | null = null;
+  if (isAnnual) badge = "BEST VALUE · 3-DAY TRIAL";
+  else if (isWeekly) badge = "NO TRIAL";
+  else if (isLifetime) badge = "ONE-TIME";
+
   return (
     <Pressable
       onPress={onSelect}
       style={[styles.pkg, selected && styles.pkgSelected]}
     >
       <View style={{ flex: 1 }}>
-        <Text style={[type.body, { fontWeight: "600" }]}>{pkg.product.title}</Text>
+        <View style={styles.pkgHeader}>
+          <Text style={[type.body, { fontWeight: "600" }]}>{pkg.product.title}</Text>
+          {badge ? <Text style={styles.badge}>{badge}</Text> : null}
+        </View>
         <Text style={[type.caption]}>{pkg.product.description}</Text>
       </View>
       <Text style={[type.body, { color: selected ? colors.accent : colors.text }]}>
@@ -134,6 +150,14 @@ function PackageCard({
       </Text>
     </Pressable>
   );
+}
+
+function findPrice(packages: PurchasesPackage[], token: string): string | null {
+  const match = packages.find((p) => {
+    const hay = `${p.identifier} ${p.product.identifier} ${p.product.title}`.toLowerCase();
+    return hay.includes(token);
+  });
+  return match?.product.priceString ?? null;
 }
 
 const styles = StyleSheet.create({
@@ -146,6 +170,7 @@ const styles = StyleSheet.create({
   },
   close: { position: "absolute", top: 60, right: spacing.lg, zIndex: 10 },
   title: { marginBottom: spacing.md },
+  subtitle: { marginTop: -spacing.sm, marginBottom: spacing.md },
   bullets: { gap: spacing.sm },
   bulletRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   packages: { gap: spacing.sm, marginTop: spacing.lg },
@@ -158,6 +183,12 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   pkgSelected: { borderColor: colors.accent },
+  pkgHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  badge: {
+    fontSize: 10,
+    color: colors.accent,
+    fontWeight: "700",
+  },
   restore: { textAlign: "center", marginTop: spacing.md },
   legal: { textAlign: "center", color: colors.textSubtle },
 });
