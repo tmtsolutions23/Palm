@@ -6,16 +6,29 @@ const config: NextConfig = {
     // Enable Cache Components when stable in deployment
     // cacheComponents: true,
   },
-  // CORS for the mobile client. Tighten this to the exact app domain in prod
-  // if you front the API with a domain other than api.palmreader.app.
+  // CORS for the mobile client. Mobile apps don't need CORS at all
+  // (they use Bearer tokens, not cookies). This headers() config is
+  // only needed if you add a web landing page or dev tools that call the API.
   async headers() {
     return [
       {
         source: "/api/:path*",
         headers: [
-          { key: "Access-Control-Allow-Origin", value: "*" },
-          { key: "Access-Control-Allow-Methods", value: "GET,POST,PATCH,DELETE,OPTIONS" },
-          { key: "Access-Control-Allow-Headers", value: "Content-Type, Authorization" },
+          {
+            key: "Access-Control-Allow-Origin",
+            value:
+              process.env.NODE_ENV === "development"
+                ? "*"
+                : "https://palmreader.app https://api.palmreader.app",
+          },
+          {
+            key: "Access-Control-Allow-Methods",
+            value: "GET,POST,PATCH,DELETE,OPTIONS",
+          },
+          {
+            key: "Access-Control-Allow-Headers",
+            value: "Content-Type, Authorization",
+          },
         ],
       },
     ];
