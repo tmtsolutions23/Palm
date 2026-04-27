@@ -26,7 +26,6 @@ export async function POST(req: NextRequest) {
     const profile = await getProfile(user.id);
     const body = PostBody.parse(await req.json());
 
-    // Free-tier users receive a curated demo reading with zero AI cost.
     if (!isPaid(profile as never)) {
       const demo = pickDemoReading(user.id);
 
@@ -69,7 +68,6 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Paid-tier users get a real AI reading.
     const admin = getSupabaseAdmin();
     const { data: photo, error: photoErr } = await admin
       .from("palm_photos")
