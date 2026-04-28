@@ -6,7 +6,7 @@ import { ApiError, errorResponse } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { isPaid } from "@/lib/subscription";
 import { fetchPalmAsBase64 } from "@/lib/storage";
-import { getAnthropic, VISION_MODEL, computeCostUsd, extractText } from "@/lib/claude";
+import { getAnthropic, getVisionModel, computeCostUsd, extractText } from "@/lib/claude";
 import {
   COMPATIBILITY_SYSTEM_PROMPT,
   buildCompatibilityUserMessage,
@@ -50,8 +50,9 @@ export async function POST(req: NextRequest) {
     ]);
 
     const anthropic = getAnthropic();
+    const visionModel = getVisionModel();
     const message = await anthropic.messages.create({
-      model: VISION_MODEL,
+      model: visionModel,
       max_tokens: 1500,
       system: [
         {
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       throw new ApiError(400, "photo_quality_low", parsed.message ?? "Palm not visible");
     }
 
-    const cost = computeCostUsd(VISION_MODEL, message.usage.input_tokens, message.usage.output_tokens);
+    const cost = computeCostUsd(visionModel, message.usage.input_tokens, message.usage.output_tokens);
 
     const { data: reading, error: insertErr } = await admin
       .from("compatibility_readings")
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
         photo_a_id: body.photo_a_id,
         photo_b_id: body.photo_b_id,
         reading_jsonb: parsed,
-        model_version: VISION_MODEL,
+        model_version: visionModel,
         input_tokens: message.usage.input_tokens,
         output_tokens: message.usage.output_tokens,
         cost_usd: cost,
@@ -99,6 +100,46 @@ export async function POST(req: NextRequest) {
     if (insertErr || !reading) throw new ApiError(500, "db_error", insertErr?.message ?? "Insert failed");
 
     return NextResponse.json({ id: reading.id, ...parsed, created_at: reading.created_at });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const user = await requireUser(req);
+    await rateLimit({ key: `compat:list:${user.id}`, limit: 60, windowSec: 60 });
+
+    const url = new URL(req.url);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "20", 10), 100);
+    const before = url.searchParams.get("before");
+
+    const admin = getSupabaseAdmin();
+    let query = admin
+      .from("compatibility_readings")
+      .select("id, partner_label, reading_jsonb, share_card_url, model_version, created_at")
+      .eq("owner_user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (before) query = query.lt("created_at", before);
+
+    const { data, error } = await query;
+    if (error) throw new ApiError(500, "db_error", error.message);
+
+    const readings = (data ?? []).map((item) => ({
+      id: item.id,
+      partner_label: item.partner_label,
+      share_card_url: item.share_card_url,
+      model_version: item.model_version,
+      created_at: item.created_at,
+      summary:
+        typeof item.reading_jsonb === "object" && item.reading_jsonb && "summary" in item.reading_jsonb
+          ? String(item.reading_jsonb.summary ?? "")
+          : "",
+    }));
+
+    return NextResponse.json({ readings });
   } catch (err) {
     return errorResponse(err);
   }

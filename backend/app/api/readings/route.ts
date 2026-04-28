@@ -5,8 +5,8 @@ import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { ApiError, errorResponse } from "@/lib/errors";
 import { rateLimit } from "@/lib/rate-limit";
 import { isPaid } from "@/lib/subscription";
-import { fetchPalmAsBase64 } from "@/lib/storage";
-import { getAnthropic, VISION_MODEL, computeCostUsd, extractText } from "@/lib/claude";
+import { cleanupPalmPhotoIfUnreferenced, fetchPalmAsBase64 } from "@/lib/storage";
+import { getAnthropic, getVisionModel, computeCostUsd, extractText } from "@/lib/claude";
 import { READING_SYSTEM_PROMPT, buildReadingUserMessage } from "@/lib/prompts/reading";
 import { pickDemoReading } from "@/lib/demo-reading";
 
@@ -25,21 +25,18 @@ export async function POST(req: NextRequest) {
 
     const profile = await getProfile(user.id);
     const body = PostBody.parse(await req.json());
+    const admin = getSupabaseAdmin();
+
+    const { data: photo, error: photoErr } = await admin
+      .from("palm_photos")
+      .select("id, user_id, storage_path")
+      .eq("id", body.photo_id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (photoErr || !photo) throw new ApiError(404, "photo_not_found", "Photo not found");
 
     if (!isPaid(profile as never)) {
       const demo = pickDemoReading(user.id);
-
-      const admin = getSupabaseAdmin();
-      const { data: photo, error: photoErr } = await admin
-        .from("palm_photos")
-        .select("id, user_id")
-        .eq("id", body.photo_id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (photoErr || !photo) {
-        throw new ApiError(404, "photo_not_found", "Photo not found");
-      }
-
       const { data: reading, error: insertErr } = await admin
         .from("readings")
         .insert({
@@ -68,20 +65,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const admin = getSupabaseAdmin();
-    const { data: photo, error: photoErr } = await admin
-      .from("palm_photos")
-      .select("id, user_id, storage_path")
-      .eq("id", body.photo_id)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (photoErr || !photo) throw new ApiError(404, "photo_not_found", "Photo not found");
-
     const { base64, mediaType } = await fetchPalmAsBase64(photo.storage_path);
 
     const anthropic = getAnthropic();
+    const visionModel = getVisionModel();
     const message = await anthropic.messages.create({
-      model: VISION_MODEL,
+      model: visionModel,
       max_tokens: 1024,
       system: [
         {
@@ -111,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     const lines = parsed.lines ?? {};
     const summary = parsed.summary ?? "";
-    const cost = computeCostUsd(VISION_MODEL, message.usage.input_tokens, message.usage.output_tokens);
+    const cost = computeCostUsd(visionModel, message.usage.input_tokens, message.usage.output_tokens);
 
     const { data: reading, error: insertErr } = await admin
       .from("readings")
@@ -121,7 +110,7 @@ export async function POST(req: NextRequest) {
         reading_type: "full",
         lines_jsonb: lines,
         summary,
-        model_version: VISION_MODEL,
+        model_version: visionModel,
         input_tokens: message.usage.input_tokens,
         output_tokens: message.usage.output_tokens,
         cost_usd: cost,
@@ -153,7 +142,7 @@ export async function GET(req: NextRequest) {
     const admin = getSupabaseAdmin();
     let q = admin
       .from("readings")
-      .select("id, reading_type, summary, share_card_url, created_at")
+      .select("id, photo_id, reading_type, summary, share_card_url, model_version, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(limit);
@@ -162,6 +151,31 @@ export async function GET(req: NextRequest) {
     const { data, error } = await q;
     if (error) throw new ApiError(500, "db_error", error.message);
     return NextResponse.json({ readings: data });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await requireUser(req);
+    await rateLimit({ key: `readings:bulk-delete:${user.id}`, limit: 5, windowSec: 60 });
+
+    const admin = getSupabaseAdmin();
+    const { data: rows, error: readErr } = await admin
+      .from("readings")
+      .select("photo_id")
+      .eq("user_id", user.id)
+      .limit(250);
+    if (readErr) throw new ApiError(500, "db_error", readErr.message);
+
+    const { error: deleteErr } = await admin.from("readings").delete().eq("user_id", user.id);
+    if (deleteErr) throw new ApiError(500, "db_error", deleteErr.message);
+
+    const photoIds = [...new Set((rows ?? []).map((row) => row.photo_id).filter(Boolean))] as string[];
+    await Promise.all(photoIds.map((photoId) => cleanupPalmPhotoIfUnreferenced(photoId)));
+
+    return NextResponse.json({ ok: true, deleted: rows?.length ?? 0 });
   } catch (err) {
     return errorResponse(err);
   }

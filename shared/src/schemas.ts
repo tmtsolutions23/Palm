@@ -29,9 +29,29 @@ export const ReadingResponse = z.object({
 });
 export type ReadingResponse = z.infer<typeof ReadingResponse>;
 
+export const CreateReadingResponse = z.object({
+  reading_id: z.string().uuid(),
+  summary: z.string(),
+  lines: ReadingLines,
+  created_at: z.string().datetime(),
+  is_demo: z.boolean().optional(),
+});
+export type CreateReadingResponse = z.infer<typeof CreateReadingResponse>;
+
+export const ReadingListItem = z.object({
+  id: z.string().uuid(),
+  photo_id: z.string().uuid().nullable().optional(),
+  reading_type: z.enum(["full", "daily", "compatibility"]),
+  summary: z.string().nullable(),
+  share_card_url: z.string().nullable(),
+  model_version: z.string().nullable().optional(),
+  created_at: z.string().datetime(),
+});
+export type ReadingListItem = z.infer<typeof ReadingListItem>;
+
 export const ReadingListResponse = z.object({
-  readings: z.array(ReadingResponse),
-  next_cursor: z.string().nullable(),
+  readings: z.array(ReadingListItem),
+  next_cursor: z.string().nullable().optional(),
 });
 export type ReadingListResponse = z.infer<typeof ReadingListResponse>;
 
@@ -43,6 +63,29 @@ export const CreateCompatibilityRequest = z.object({
   partner_label: z.string().min(1).max(50),
 });
 export type CreateCompatibilityRequest = z.infer<typeof CreateCompatibilityRequest>;
+
+export const CompatibilityReadingBody = z.object({
+  communication: z.string().optional(),
+  romance: z.string().optional(),
+  conflict: z.string().optional(),
+  summary: z.string().optional(),
+});
+export type CompatibilityReadingBody = z.infer<typeof CompatibilityReadingBody>;
+
+export const CompatibilityListItem = z.object({
+  id: z.string().uuid(),
+  partner_label: z.string().nullable(),
+  summary: z.string(),
+  share_card_url: z.string().nullable(),
+  model_version: z.string().nullable(),
+  created_at: z.string().datetime(),
+});
+export type CompatibilityListItem = z.infer<typeof CompatibilityListItem>;
+
+export const CompatibilityListResponse = z.object({
+  readings: z.array(CompatibilityListItem),
+});
+export type CompatibilityListResponse = z.infer<typeof CompatibilityListResponse>;
 
 // ─── Profile ──────────────────────────────────────────────────────────────────
 
@@ -72,5 +115,13 @@ export type DailyInsightResponse = z.infer<typeof DailyInsightResponse>;
 export const ErrorResponse = z.object({
   error: z.string(),
   message: z.string(),
+  issues: z
+    .array(
+      z.object({
+        path: z.string(),
+        message: z.string(),
+      }),
+    )
+    .optional(),
 });
 export type ErrorResponse = z.infer<typeof ErrorResponse>;

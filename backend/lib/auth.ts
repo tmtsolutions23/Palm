@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { getSupabaseAnon, getSupabaseAdmin } from "./supabase-admin";
 import { ApiError } from "./errors";
+import { getBackendEnv } from "./env/backend";
 
 export interface AuthedUser {
   id: string;
@@ -52,8 +53,8 @@ export async function getProfile(userId: string) {
 /** Authorize Vercel cron requests via the platform-issued bearer header. */
 export function requireCronAuth(req: NextRequest): void {
   const header = req.headers.get("authorization") ?? "";
-  const expected = `Bearer ${process.env.CRON_SECRET ?? ""}`;
-  if (!process.env.CRON_SECRET || header !== expected) {
+  const expected = `Bearer ${getBackendEnv().CRON_SECRET}`;
+  if (header !== expected) {
     throw new ApiError(401, "unauthorized", "Cron auth failed");
   }
 }

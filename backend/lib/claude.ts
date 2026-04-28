@@ -1,19 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { getBackendEnv } from "@/lib/env/backend";
 
 let client: Anthropic | null = null;
 
 export function getAnthropic(): Anthropic {
   if (client) return client;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-  client = new Anthropic({ apiKey });
+  const env = getBackendEnv();
+  client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
   return client;
 }
 
-export const VISION_MODEL =
-  process.env.ANTHROPIC_MODEL_VISION ?? "claude-sonnet-4-6";
-export const DAILY_MODEL =
-  process.env.ANTHROPIC_MODEL_DAILY ?? "claude-haiku-4-5-20251001";
+export function getVisionModel(): string {
+  return getBackendEnv().ANTHROPIC_MODEL_VISION;
+}
+
+export function getDailyModel(): string {
+  return getBackendEnv().ANTHROPIC_MODEL_DAILY;
+}
 
 /**
  * Approximate Claude pricing (USD per million tokens). Update when Anthropic

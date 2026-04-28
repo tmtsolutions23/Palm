@@ -42,3 +42,38 @@ export async function signedPalmUrl(storagePath: string, ttlSec = 3600): Promise
   }
   return data.signedUrl;
 }
+
+/**
+ * Remove a photo binary + metadata only when nothing references it anymore.
+ * Safe to call after deleting a reading/compatibility row.
+ */
+export async function cleanupPalmPhotoIfUnreferenced(photoId: string | null | undefined): Promise<void> {
+  if (!photoId) return;
+
+  const admin = getSupabaseAdmin();
+  const { data: photo, error: photoErr } = await admin
+    .from("palm_photos")
+    .select("id, storage_path")
+    .eq("id", photoId)
+    .maybeSingle();
+
+  if (photoErr || !photo?.storage_path) return;
+
+  const [{ count: readingRefs }, { count: compatARefs }, { count: compatBRefs }] = await Promise.all([
+    admin.from("readings").select("id", { count: "exact", head: true }).eq("photo_id", photoId),
+    admin
+      .from("compatibility_readings")
+      .select("id", { count: "exact", head: true })
+      .eq("photo_a_id", photoId),
+    admin
+      .from("compatibility_readings")
+      .select("id", { count: "exact", head: true })
+      .eq("photo_b_id", photoId),
+  ]);
+
+  const totalRefs = (readingRefs ?? 0) + (compatARefs ?? 0) + (compatBRefs ?? 0);
+  if (totalRefs > 0) return;
+
+  await admin.storage.from("palms").remove([photo.storage_path]).catch(() => {});
+  await admin.from("palm_photos").delete().eq("id", photoId).catch(() => {});
+}

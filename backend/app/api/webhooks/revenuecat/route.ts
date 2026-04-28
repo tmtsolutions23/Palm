@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase-admin";
 import { ApiError, errorResponse } from "@/lib/errors";
 import type { SubscriptionStatus } from "@/lib/subscription";
+import { getBackendEnv } from "@/lib/env/backend";
 
 export const runtime = "nodejs";
 
@@ -9,16 +10,15 @@ export const runtime = "nodejs";
  * RevenueCat webhook receiver. Configure in the RevenueCat dashboard with
  * Authorization header set to the value of REVENUECAT_WEBHOOK_AUTH.
  *
- * Docs: https://www.revenuecat.com/docs/webhooks
+ * Optional hardening:
+ * - set REVENUECAT_LIFETIME_PRODUCT_IDS to a comma-separated allowlist for exact
+ *   lifetime detection, rather than relying on substring matches.
  */
 export async function POST(req: NextRequest) {
   try {
-    const expected = process.env.REVENUECAT_WEBHOOK_AUTH;
-    if (!expected) {
-      throw new ApiError(500, "config", "REVENUECAT_WEBHOOK_AUTH is not set");
-    }
+    const env = getBackendEnv();
     const auth = req.headers.get("authorization");
-    if (auth !== expected) {
+    if (auth !== env.REVENUECAT_WEBHOOK_AUTH) {
       throw new ApiError(401, "unauthorized", "Webhook auth failed");
     }
 
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!userId) throw new ApiError(400, "bad_payload", "Missing app_user_id");
 
     const admin = getSupabaseAdmin();
-    const status = mapEventToStatus(event.type, event);
+    const status = mapEventToStatus(event.type, event, parseLifetimeProductIds(env.REVENUECAT_LIFETIME_PRODUCT_IDS));
     const expiresAt = event.expiration_at_ms
       ? new Date(event.expiration_at_ms).toISOString()
       : null;
@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
     if (event.product_id) updates.subscription_product_id = event.product_id;
     if (expiresAt !== null) updates.subscription_expires_at = expiresAt;
 
-    // app_user_id should equal Supabase user.id if mobile sets it correctly.
     await admin.from("profiles").update(updates).eq("id", userId);
 
     await admin.from("subscription_events").insert({
@@ -66,13 +65,24 @@ interface RevenueCatWebhookPayload {
     app_user_id?: string;
     product_id?: string;
     expiration_at_ms?: number;
+    period_type?: string;
     [key: string]: unknown;
   };
+}
+
+function parseLifetimeProductIds(raw: string | undefined): Set<string> {
+  return new Set(
+    (raw ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
 }
 
 function mapEventToStatus(
   type: string,
   event: { period_type?: string; product_id?: string },
+  lifetimeProductIds: Set<string>,
 ): SubscriptionStatus | null {
   switch (type) {
     case "INITIAL_PURCHASE":
@@ -81,8 +91,7 @@ function mapEventToStatus(
     case "UNCANCELLATION":
       return event.period_type === "TRIAL" ? "trialing" : "active";
     case "NON_RENEWING_PURCHASE":
-      // Lifetime detection: if your product IDs include 'lifetime', treat as lifetime
-      if (event.product_id?.includes("lifetime")) return "lifetime";
+      if (event.product_id && lifetimeProductIds.has(event.product_id)) return "lifetime";
       return "active";
     case "CANCELLATION":
     case "EXPIRATION":
